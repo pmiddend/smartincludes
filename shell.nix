@@ -5,7 +5,7 @@ let
   inherit (nixpkgs) pkgs;
 
   f = { mkDerivation, attoparsec, base, bifunctors, cabal-install
-      , hindent, hlint, stdenv, text, vector
+      , hindent, hlint, optparse-applicative, stdenv, text, vector
       }:
       mkDerivation {
         pname = "smartincludes";
@@ -14,7 +14,7 @@ let
         isLibrary = false;
         isExecutable = true;
         executableHaskellDepends = [
-          attoparsec base bifunctors text vector
+          attoparsec base bifunctors optparse-applicative text vector
         ];
         executableToolDepends = [ cabal-install hindent hlint ];
         description = "Reorder C++ include directives, smart";
