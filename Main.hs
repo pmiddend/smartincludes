@@ -17,7 +17,7 @@ import Data.Attoparsec.Text
   , takeWhile
   )
 import Data.Bifunctor (bimap, second)
-import Data.Bool (Bool(False, True), (&&), not)
+import Data.Bool (Bool(False, True), (&&), not, otherwise)
 import Data.Eq (Eq, (/=), (==))
 import Data.Foldable (fold, toList)
 import Data.Function ((.), const)
@@ -30,7 +30,7 @@ import Data.Maybe (Maybe(Just, Nothing), fromMaybe, isJust, maybe)
 import Data.Monoid ((<>), mempty)
 import Data.Ord (Ord)
 import Data.String (String)
-import Data.Text (Text, breakOn, intercalate, null, pack, splitOn)
+import Data.Text (Text, breakOn, intercalate, pack, splitOn)
 import qualified Data.Text as Text
 import Data.Text.IO (interact)
 import Data.Tuple (fst, snd, uncurry)
@@ -38,6 +38,7 @@ import Data.Vector
   ( Vector
   , concat
   , drop
+  , null
   , filter
   , findIndex
   , fromList
@@ -84,9 +85,9 @@ optionsParser =
         optional
           (parseExternalHeader <$>
            Opt.strOption
-             (Opt.long "external-header-begin" <>
+             (Opt.long "external-header-pair" <>
               Opt.help
-                "set a header to insert before and after external sources"))
+                "set a header pair to insert before and after external sources"))
       librariesArgument =
         fromList <$>
         many
@@ -129,7 +130,8 @@ surroundBlocks input startPred endPred beginSurround endSurround =
   let pairs :: [(Vector a, Vector a)]
       pairs = pairBlocks input startPred endPred
       surround :: Endo (Vector a)
-      surround v = singleton beginSurround <> v <> singleton endSurround
+      surround v | null v = mempty
+                 | otherwise = singleton beginSurround <> v <> singleton endSurround
    in unpairBlocks (second surround <$> pairs)
 
 liftVector :: ([a] -> [b]) -> Vector a -> Vector b
@@ -156,7 +158,7 @@ remoteIncludeLine (RemoteIncludeLine x) = Just x
 remoteIncludeLine _ = Nothing
 
 emptyLine :: Line -> Bool
-emptyLine (NormalLine x) = null x
+emptyLine (NormalLine x) = Text.null x
 emptyLine _ = False
 
 nonEmptyLine :: Line -> Bool
@@ -221,7 +223,7 @@ processIncludes options lines =
               ((/= lastRank) . fst)
               (0, beginExternal)
               (0, endExternal)
-   in RemoteIncludeLine <$> uniq (snd <$> withExternalHeader)
+   in (RemoteIncludeLine <$> uniq (snd <$> withExternalHeader)) <> singleton (NormalLine "")
 
 processFile :: ProgramOptions -> Endo Text
 processFile options input =
