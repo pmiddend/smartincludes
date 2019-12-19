@@ -50,6 +50,59 @@ How does it know which headers are external? Well, everything you specify using 
 
 here’s your code
 #+end_src
+*** Sorting headers topologically
+
+Adding the correct headers for your C++ source file is hard, since C++ lacks a real “module” system. If you have a class =foo= in file =foo.hpp= such as this:
+
+#+begin_src cpp
+class foo {};
+#+end_src
+
+and a class =bar= in =bar.hpp= that uses =foo=:
+
+#+begin_src cpp
+#include <foo.hpp>
+
+class bar : foo {};
+#+end_src
+
+Then, of course, you need to include =foo.hpp=. However, if you have /another/ class =baz= which uses =foo=, you now have /two/ possibilities for including it =foo=. This, however wrong it might seem, is correct:
+
+#+begin_src cpp
+#include <bar.hpp>
+
+class baz : foo {};
+#+end_src
+
+Because the compiler/preprocessor just “copy and pasting” text when compiling the latter fragment, you can go wild with transitive includes.
+
+The code above compiles just fine, /until/ you rewrite something and =bar= not doesn’t need =foo= anymore. Including =bar.hpp= then doesn’t import =foo= and you get an error compiling. Bummer. This seems a bit trivial, because it is, but in bigger projects, this problem unveils in the following way:
+
+#+begin_src cpp
+#include <lib1/foo.hpp>
+#include <yourproject/x.hpp>
+#include <lib2/bar.hpp>
+#include <yourproject/y.hpp>
+#include <lib3/baz.hpp>
+
+…
+#+end_src
+
+The code with this include order might “magically” compile, because, for example, =x.hpp= includes just the right things to make =y.hpp= further down compile, and then to make the whole source file compile. But as soon as you switch around your includes (swap =foo.hpp= and =bar.hpp=, for instance), it breaks.
+
+To detect (not fix, mind you) these errors, we can at least order our includes so that the libraries that are /used/ by other libraries are included /first/, as such:
+
+#+begin_src cpp
+#include <lib1/foo.hpp>
+#include <lib2/bar.hpp>
+#include <lib3/baz.hpp>
+#include <yourproject/x.hpp>
+#include <yourproject/y.hpp>
+#+end_src
+
+This way, assuming =lib1, lib2, lib3= are “safe”, your project is “sort of safe” from mixups, too.
+
+And this is exactly what the (repeatable) =--library= parameter is for: specifying which libraries are external to your app, and in which order the include blocks using this library should be placed.
 ** Installation
 
 Currently, only installation via the [[https://nixos.org/nix/][Nix]] package manager is supported. This allows for reproducible, cross-platform builds. Building (and running, see last line) is as easy as:
