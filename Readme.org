@@ -1,0 +1,72 @@
+* smartincludes — order your C++ includes like a boss
+
+[[https://travis-ci.com/pmiddend/smartincludes.svg?branch=master][https://travis-ci.com/pmiddend/smartincludes.svg?branch=master]]
+
+** What is this?
+
+smartincludes rewrites your C++ =#include= blocks. You know, the ones usually at the top of the file. In short:
+
+- it sorts the includes
+- removes duplicates
+- optionally forms groups of includes and orders those by a “rank” system (see below)
+- it optionally surrounds “external” includes with a special header
+
+** Philosophy
+
+smartincludes is based upon a few assumptions and good practices. These are described here:
+
+*** Project-local warning flags
+
+Special warning flags like =-Wall= or =-Wextra= are useful, and you should use them. However, we want to only apply them to /our/ headers, not somebody else’s, because usually, we cannot fix those “external” warnings easily.
+
+In order to do that, we have to add special compiler commands before we include external headers, and also add special compiler commands /after/ we are done including those external headers.
+
+So it looks like that
+
+#+begin_src c++
+#include <myproject/a.hpp>
+#include <myproject/b.hpp>
+#pragma magic begin
+#include <boost/someheader.hpp>
+#pragma magic end
+
+here’s your code
+#+end_src
+
+Of course, adding those extra headers is tedious and error-prone. Wouldn’t it be great to have a program that adds those headers automatically? Well…you’re looking at it. For that, you have to have a separate header file which contains these =#pragma= magic commands. Let’s call those =myproject/external_begin.hpp= and =myproject/external_end.hpp= For example, the following command line auto-adds those headers:
+
+#+begin_example
+smartincludes --library myproject --external-header-pair myproject/external_begin.hpp,myproject/external_end.hpp myfile.cpp
+#+end_example
+
+How does it know which headers are external? Well, everything you specify using =--library= is automatically “not external”. The resulting file will look like this:
+
+#+begin_src c++
+#include <myproject/a.hpp>
+#include <myproject/b.hpp>
+#include <myproject/external_begin.hpp>
+#include <boost/someheader.hpp>
+#include <myproject/external_end.hpp>
+
+here’s your code
+#+end_src
+** Installation
+
+Currently, only installation via the [[https://nixos.org/nix/][Nix]] package manager is supported. This allows for reproducible, cross-platform builds. Building (and running, see last line) is as easy as:
+
+#+begin_example
+git clone https://github.com/pmiddend/smartincludes.git
+cd smartincludes
+nix-build
+result/bin/smartincludes --help
+#+end_example
+** Usage
+
+The command line parameters (which are shown when you run =smartincludes --help=) are described in detail above. The general usage is simply:
+
+#+begin_example
+smartincludes < $inputfile > $outputfile
+#+end_example
+
+It’ll read its input from stdin and write it to stdout.
+
