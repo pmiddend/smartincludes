@@ -38,12 +38,12 @@ import Data.Vector
   ( Vector
   , concat
   , drop
-  , null
   , filter
   , findIndex
   , fromList
   , length
   , mapMaybe
+  , null
   , singleton
   , take
   , uniq
@@ -130,8 +130,9 @@ surroundBlocks input startPred endPred beginSurround endSurround =
   let pairs :: [(Vector a, Vector a)]
       pairs = pairBlocks input startPred endPred
       surround :: Endo (Vector a)
-      surround v | null v = mempty
-                 | otherwise = singleton beginSurround <> v <> singleton endSurround
+      surround v
+        | null v = mempty
+        | otherwise = singleton beginSurround <> v <> singleton endSurround
    in unpairBlocks (second surround <$> pairs)
 
 liftVector :: ([a] -> [b]) -> Vector a -> Vector b
@@ -223,18 +224,14 @@ processIncludes options lines =
               ((/= lastRank) . fst)
               (0, beginExternal)
               (0, endExternal)
-   in (RemoteIncludeLine <$> uniq (snd <$> withExternalHeader)) <> singleton (NormalLine "")
+   in RemoteIncludeLine <$> uniq (snd <$> withExternalHeader)
 
 processFile :: ProgramOptions -> Endo Text
 processFile options input =
   let inputLines :: Vector Line
       inputLines = parseLines input
       includeBlocks :: [(Vector Line, Vector Line)]
-      includeBlocks =
-        pairBlocks
-          inputLines
-          isRemoteIncludeLine
-          (isNormalLine `andPred` nonEmptyLine)
+      includeBlocks = pairBlocks inputLines isRemoteIncludeLine isNormalLine
       processedLines :: Vector Line
       processedLines =
         unpairBlocks (second (processIncludes options) <$> includeBlocks)
