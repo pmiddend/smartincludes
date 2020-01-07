@@ -23,7 +23,7 @@ import Data.Foldable (fold, toList)
 import Data.Function ((.), const)
 import Data.Functor ((<$>))
 import Data.Int (Int)
-import Data.List (sort)
+import Data.List (sort, sortOn)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Maybe (Maybe(Just, Nothing), fromMaybe, isJust, maybe)
@@ -138,6 +138,9 @@ surroundBlocks input startPred endPred beginSurround endSurround =
 liftVector :: ([a] -> [b]) -> Vector a -> Vector b
 liftVector f = fromList . f . toList
 
+sortOnVector :: Ord b => (a -> b) -> Endo (Vector a)
+sortOnVector f = liftVector (sortOn f)
+
 sortVector :: Ord a => Endo (Vector a)
 sortVector = liftVector sort
 
@@ -212,7 +215,8 @@ processIncludes options lines =
       rankedIncludes :: Vector (Int, Paths)
       rankedIncludes = (\x -> (rankInclude x, x)) <$> includeLines
       sortedIncludes :: Vector (Int, Paths)
-      sortedIncludes = sortVector rankedIncludes
+      sortedIncludes =
+        sortOnVector (\(r, p) -> (r, NE.length p, p)) rankedIncludes
       withExternalHeader :: Vector (Int, Paths)
       withExternalHeader =
         case optionsExternalHeader options of
