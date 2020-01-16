@@ -216,7 +216,7 @@ processIncludes options lines =
       rankedIncludes = (\x -> (rankInclude x, x)) <$> includeLines
       sortedIncludes :: Vector (Int, Paths)
       sortedIncludes =
-        sortOnVector (\(r, p) -> (r, NE.length p, p)) rankedIncludes
+        sortOnVector (\(r, p) -> (r, NE.init p, NE.last p)) rankedIncludes
       withExternalHeader :: Vector (Int, Paths)
       withExternalHeader =
         case optionsExternalHeader options of
