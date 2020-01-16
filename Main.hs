@@ -30,7 +30,7 @@ import Data.Maybe (Maybe(Just, Nothing), fromMaybe, isJust, maybe)
 import Data.Monoid ((<>), mempty)
 import Data.Ord (Ord)
 import Data.String (String)
-import Data.Text (Text, breakOn, intercalate, pack, splitOn)
+import Data.Text (Text, breakOn, intercalate, isSuffixOf, pack, splitOn)
 import qualified Data.Text as Text
 import Data.Text.IO (interact)
 import Data.Tuple (fst, snd, uncurry)
@@ -195,6 +195,13 @@ coparseLines = intercalate "\n" . (coparseLine <$>) . toList
     coparseLine (NormalLine l) = l
     coparseLine (RemoteIncludeLine t) = "#include <" <> coparsePaths t <> ">"
 
+stdlibInclude :: Paths -> Int
+stdlibInclude (a :| [])
+  | ".hpp" `isSuffixOf` a = 0
+  | ".h" `isSuffixOf` a = 0
+  | otherwise = 1
+stdlibInclude _ = 0
+
 processIncludes :: ProgramOptions -> Endo (Vector Line)
 processIncludes options lines =
   let includeLinesUnfiltered :: Vector Paths
@@ -216,7 +223,9 @@ processIncludes options lines =
       rankedIncludes = (\x -> (rankInclude x, x)) <$> includeLines
       sortedIncludes :: Vector (Int, Paths)
       sortedIncludes =
-        sortOnVector (\(r, p) -> (r, NE.init p, NE.last p)) rankedIncludes
+        sortOnVector
+          (\(r, p) -> (r, stdlibInclude p, NE.init p, NE.last p))
+          rankedIncludes
       withExternalHeader :: Vector (Int, Paths)
       withExternalHeader =
         case optionsExternalHeader options of
