@@ -159,13 +159,24 @@ data IncludeBrace
   | IncludeBraceRemote
   deriving (Show, Eq)
 
+type Suffix = Text
+
+data IncludeLineData = IncludeLineData {
+    includeBrace :: IncludeBrace
+  , includePaths :: Paths
+  , includeSuffix :: Suffix
+  } deriving(Show)
+
+instance Eq IncludeLineData where
+  (IncludeLineData a b _) == (IncludeLineData a' b' _) = a == a' && b == b'
+
 data Line
-  = RemoteIncludeLine IncludeBrace Paths
+  = RemoteIncludeLine IncludeLineData
   | NormalLine Text
   deriving (Show, Eq)
 
-remoteIncludeLine :: Line -> Maybe (IncludeBrace, Paths)
-remoteIncludeLine (RemoteIncludeLine b x) = Just (b, x)
+remoteIncludeLine :: Line -> Maybe IncludeLineData
+remoteIncludeLine (RemoteIncludeLine d) = Just d
 remoteIncludeLine _ = Nothing
 
 emptyLine :: Line -> Bool
@@ -195,30 +206,33 @@ parseLines = fromList . fold . parseOnly (lineParser `sepBy` endOfLine)
       void (string ("#include " <> Text.singleton openBrace))
       content <- parsePaths <$> takeWhile (/= closeBrace)
       void (char closeBrace)
-      pure content
+      suffix <- takeWhile (not . isEndOfLine)
+      pure (content, suffix)
     localIncludeLineParser :: Parser Line
-    localIncludeLineParser =
-      RemoteIncludeLine IncludeBraceLocal <$> bracedIncludeLineParser '"' '"'
+    localIncludeLineParser = do
+      (content, suffix) <- bracedIncludeLineParser '"' '"'
+      pure (RemoteIncludeLine (IncludeLineData IncludeBraceLocal content suffix))
     remoteIncludeLineParser :: Parser Line
-    remoteIncludeLineParser =
-      RemoteIncludeLine IncludeBraceRemote <$> bracedIncludeLineParser '<' '>'
+    remoteIncludeLineParser = do
+      (content, suffix) <- bracedIncludeLineParser '<' '>'
+      pure (RemoteIncludeLine (IncludeLineData IncludeBraceRemote content suffix))
     noneIncludeLineParser :: Parser Line
     noneIncludeLineParser = do
       void (string "#include ")
       content <- parsePaths <$> takeWhile (not . isEndOfLine)
-      pure (RemoteIncludeLine IncludeBraceNone content)
+      pure (RemoteIncludeLine (IncludeLineData IncludeBraceNone content mempty))
 
 coparseLines :: Vector Line -> Text
 coparseLines = intercalate "\n" . (coparseLine <$>) . toList
   where
     coparseLine :: Line -> Text
     coparseLine (NormalLine l) = l
-    coparseLine (RemoteIncludeLine IncludeBraceRemote t) =
-      "#include <" <> coparsePaths t <> ">"
-    coparseLine (RemoteIncludeLine IncludeBraceLocal t) =
-      "#include \"" <> coparsePaths t <> "\""
-    coparseLine (RemoteIncludeLine IncludeBraceNone t) =
-      "#include " <> coparsePaths t
+    coparseLine (RemoteIncludeLine (IncludeLineData IncludeBraceRemote t suffix)) =
+      "#include <" <> coparsePaths t <> ">" <> suffix
+    coparseLine (RemoteIncludeLine (IncludeLineData IncludeBraceLocal t suffix)) =
+      "#include \"" <> coparsePaths t <> "\"" <> suffix
+    coparseLine (RemoteIncludeLine (IncludeLineData IncludeBraceNone t suffix)) =
+      "#include " <> coparsePaths t <> suffix
 
 stdlibInclude :: Paths -> Int
 stdlibInclude (a :| [])
@@ -233,30 +247,30 @@ remoteBrace _ = 1
 
 processIncludes :: ProgramOptions -> Endo (Vector Line)
 processIncludes options lines =
-  let includeLinesUnfiltered :: Vector (IncludeBrace, Paths)
+  let includeLinesUnfiltered :: Vector IncludeLineData
       includeLinesUnfiltered = mapMaybe remoteIncludeLine lines
-      includeLines :: Vector (IncludeBrace, Paths)
+      includeLines :: Vector IncludeLineData
       includeLines =
         filter
           (maybe
              (const True)
-             (\(begin, end) -> ((/= begin) . snd) `andPred` ((/= end) . snd))
+             (\(begin, end) -> ((/= begin) . includePaths) `andPred` ((/= end) . includePaths))
              (optionsExternalHeader options))
           includeLinesUnfiltered
       lastRank :: Int
       lastRank = length (optionsLibraries options)
-      rankInclude :: (IncludeBrace, Paths) -> Int
-      rankInclude (_, x :| _) =
+      rankInclude :: IncludeLineData -> Int
+      rankInclude (IncludeLineData _ (x :| _) _) =
         fromMaybe lastRank (findIndex (== x) (optionsLibraries options))
-      rankedIncludes :: Vector (Int, (IncludeBrace, Paths))
+      rankedIncludes :: Vector (Int, IncludeLineData)
       rankedIncludes = (\x -> (rankInclude x, x)) <$> includeLines
-      sortedIncludes :: Vector (Int, (IncludeBrace, Paths))
+      sortedIncludes :: Vector (Int, IncludeLineData)
       sortedIncludes =
         sortOnVector
-          (\(r, (b, p)) ->
+          (\(r, (IncludeLineData b p _)) ->
              (r, remoteBrace b, stdlibInclude p, NE.init p, NE.last p))
           rankedIncludes
-      withExternalHeader :: Vector (Int, (IncludeBrace, Paths))
+      withExternalHeader :: Vector (Int, IncludeLineData)
       withExternalHeader =
         case optionsExternalHeader options of
           Nothing -> sortedIncludes
@@ -265,9 +279,9 @@ processIncludes options lines =
               sortedIncludes
               ((== lastRank) . fst)
               ((/= lastRank) . fst)
-              (0, (IncludeBraceRemote, beginExternal))
-              (0, (IncludeBraceRemote, endExternal))
-   in uncurry RemoteIncludeLine <$> uniq (snd <$> withExternalHeader)
+              (0, (IncludeLineData IncludeBraceRemote beginExternal mempty))
+              (0, (IncludeLineData IncludeBraceRemote endExternal mempty))
+   in RemoteIncludeLine <$> uniq (snd <$> withExternalHeader)
 
 processFile :: ProgramOptions -> Endo Text
 processFile options input =
