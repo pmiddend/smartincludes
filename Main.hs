@@ -3,8 +3,9 @@
 
 module Main where
 
+import System.FilePath(FilePath)
 import Control.Applicative ((<*>), (<|>), many, optional, pure)
-import Control.Monad (void)
+import Control.Monad (void, when)
 import Data.Attoparsec.Text
   ( Parser
   , char
@@ -18,7 +19,7 @@ import Data.Attoparsec.Text
   , takeWhile
   )
 import Data.Bifunctor (bimap, second)
-import Data.Bool (Bool(False, True), (&&), not, otherwise)
+import Data.Bool (Bool(False, True), (&&), not, otherwise, (||))
 import Data.Eq (Eq, (/=), (==))
 import Data.Foldable (fold, toList)
 import Data.Function ((.), const)
@@ -33,12 +34,13 @@ import Data.Ord (Ord)
 import Data.String (String, IsString, fromString)
 import Data.Text (Text, breakOn, intercalate, isSuffixOf, pack, splitOn)
 import qualified Data.Text as Text
-import Data.Text.IO (interact)
+import Data.Text.IO (interact, readFile, writeFile)
 import Data.Tuple (fst, snd, uncurry)
 import Data.Vector
   ( Vector
   , concat
   , drop
+  , head
   , filter
   , findIndex
   , fromList
@@ -75,6 +77,7 @@ data ProgramOptions =
   ProgramOptions
     { optionsExternalHeader :: Maybe (Paths, Paths)
     , optionsLibraries :: LibraryList
+    , optionsInplaceFile :: Maybe FilePath
     }
 
 optionsParser :: Opt.Parser ProgramOptions
@@ -95,7 +98,8 @@ optionsParser =
           (pack <$>
            Opt.strOption
              (Opt.long "library" <> Opt.help "set a library to sort separately"))
-   in ProgramOptions <$> headerArgument <*> librariesArgument
+      inplaceArgument = Opt.optional (Opt.strOption (Opt.long "inplace-file" <> Opt.help "replace in the given file"))
+   in ProgramOptions <$> headerArgument <*> librariesArgument <*> inplaceArgument
 
 parseOptions :: IO ProgramOptions
 parseOptions =
@@ -126,11 +130,14 @@ pairBlocks xs startPred endPred =
 unpairBlocksSimple :: [(Vector a, Vector a)] -> Vector a
 unpairBlocksSimple xs = concat (uncurry (<>) <$> xs)
 
-unpairBlocksNewlines :: IsString a => [(Vector a, Vector a)] -> Vector a
+unpairBlocksNewlines :: [(Vector Line, Vector Line)] -> Vector Line
 unpairBlocksNewlines [] = mempty
 unpairBlocksNewlines xs =
   let (lastNormal, lastInclude) = last xs
-  in unpairBlocksSimple ((init xs) <> [(singleton "" <> lastNormal, lastInclude)])
+      newNormal = if null lastNormal || head lastNormal == ""
+                  then lastNormal
+                  else singleton "" <> lastNormal
+  in unpairBlocksSimple ((init xs) <> [(newNormal, lastInclude)])
 
 surroundBlocks ::
      forall a. Vector a -> (a -> Bool) -> (a -> Bool) -> a -> a -> Vector a
@@ -307,4 +314,9 @@ processFile options input =
 main :: IO ()
 main = do
   opts <- parseOptions
-  interact (processFile opts)
+  case optionsInplaceFile opts of
+    Nothing -> interact (processFile opts)
+    Just fn -> do
+      contentsIn <- readFile fn
+      let contentsOut = processFile opts contentsIn
+      when (contentsIn /= contentsOut) (writeFile fn contentsOut)
