@@ -24,13 +24,13 @@ import Data.Foldable (fold, toList)
 import Data.Function ((.), const)
 import Data.Functor ((<$>))
 import Data.Int (Int)
-import Data.List (sort, sortOn)
+import Data.List (sort, sortOn, init, last)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Maybe (Maybe(Just, Nothing), fromMaybe, isJust, maybe)
 import Data.Monoid ((<>), mempty)
 import Data.Ord (Ord)
-import Data.String (String)
+import Data.String (String, IsString, fromString)
 import Data.Text (Text, breakOn, intercalate, isSuffixOf, pack, splitOn)
 import qualified Data.Text as Text
 import Data.Text.IO (interact)
@@ -122,8 +122,15 @@ pairBlocks xs startPred endPred =
                in (normalBlock, specialBlock) :
                   pairBlocks rest' startPred endPred
 
-unpairBlocks :: [(Vector a, Vector a)] -> Vector a
-unpairBlocks xs = concat (uncurry (<>) <$> xs)
+-- this is the simple solution, allowing no empty line between the include block and the rest
+unpairBlocksSimple :: [(Vector a, Vector a)] -> Vector a
+unpairBlocksSimple xs = concat (uncurry (<>) <$> xs)
+
+unpairBlocksNewlines :: IsString a => [(Vector a, Vector a)] -> Vector a
+unpairBlocksNewlines [] = mempty
+unpairBlocksNewlines xs =
+  let (lastNormal, lastInclude) = last xs
+  in unpairBlocksSimple ((init xs) <> [(singleton "" <> lastNormal, lastInclude)])
 
 surroundBlocks ::
      forall a. Vector a -> (a -> Bool) -> (a -> Bool) -> a -> a -> Vector a
@@ -134,7 +141,7 @@ surroundBlocks input startPred endPred beginSurround endSurround =
       surround v
         | null v = mempty
         | otherwise = singleton beginSurround <> v <> singleton endSurround
-   in unpairBlocks (second surround <$> pairs)
+   in unpairBlocksSimple (second surround <$> pairs)
 
 liftVector :: ([a] -> [b]) -> Vector a -> Vector b
 liftVector f = fromList . f . toList
@@ -174,6 +181,9 @@ data Line
   = RemoteIncludeLine IncludeLineData
   | NormalLine Text
   deriving (Show, Eq)
+
+instance IsString Line where
+  fromString = NormalLine . pack
 
 remoteIncludeLine :: Line -> Maybe IncludeLineData
 remoteIncludeLine (RemoteIncludeLine d) = Just d
@@ -291,7 +301,7 @@ processFile options input =
       includeBlocks = pairBlocks inputLines isRemoteIncludeLine isNormalLine
       processedLines :: Vector Line
       processedLines =
-        unpairBlocks (second (processIncludes options) <$> includeBlocks)
+        unpairBlocksNewlines (second (processIncludes options) <$> includeBlocks)
    in coparseLines processedLines
 
 main :: IO ()
