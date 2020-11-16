@@ -25,7 +25,7 @@ import Data.Foldable (fold, toList)
 import Data.Function ((.), const)
 import Data.Functor ((<$>))
 import Data.Int (Int)
-import Data.List (sort, sortOn, init, last)
+import Data.List (sort, sortOn, init, last, any)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Maybe (Maybe(Just, Nothing), fromMaybe, isJust, maybe)
@@ -133,8 +133,9 @@ unpairBlocksSimple xs = concat (uncurry (<>) <$> xs)
 unpairBlocksNewlines :: [(Vector Line, Vector Line)] -> Vector Line
 unpairBlocksNewlines [] = mempty
 unpairBlocksNewlines xs =
-  let (lastNormal, lastInclude) = last xs
-      newNormal = if null lastNormal || head lastNormal == ""
+  let hasIncludes = any (not . null . snd) xs
+      (lastNormal, lastInclude) = last xs
+      newNormal = if null lastNormal || head lastNormal == "" || not hasIncludes
                   then lastNormal
                   else singleton "" <> lastNormal
   in unpairBlocksSimple ((init xs) <> [(newNormal, lastInclude)])
