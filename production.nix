@@ -10,7 +10,7 @@ mkDerivation {
   executableHaskellDepends = [
     attoparsec base bifunctors optparse-applicative text vector
   ];
-  executableToolDepends = [ cabal-install hindent hlint ];
+  executableToolDepends = [ cabal-install hlint ];
   description = "Reorder C++ include directives, smart";
   license = "unknown";
   hydraPlatforms = stdenv.lib.platforms.none;
